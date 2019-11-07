@@ -1,15 +1,17 @@
-module github.com/labstack/echo
+module github.com/labstack/echo/v4
+
+go 1.12
 
 require (
-	github.com/davecgh/go-spew v1.1.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/labstack/gommon v0.2.7
-	github.com/mattn/go-colorable v0.0.9 // indirect
-	github.com/mattn/go-isatty v0.0.3 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/stretchr/testify v1.2.1
-	github.com/valyala/bytebufferpool v0.0.0-20160817181652-e746df99fe4a // indirect
-	github.com/valyala/fasttemplate v0.0.0-20170224212429-dcecefd839c4
-	golang.org/x/crypto v0.0.0-20180312195533-182114d58262
-	golang.org/x/sys v0.0.0-20180312081825-c28acc882ebc // indirect
+	github.com/labstack/echo v3.3.10+incompatible // indirect
+	github.com/labstack/gommon v0.3.0
+	github.com/mattn/go-colorable v0.1.4 // indirect
+	github.com/mattn/go-isatty v0.0.10 // indirect
+	github.com/stretchr/testify v1.4.0
+	github.com/valyala/fasttemplate v1.1.0
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/net v0.0.0-20191021144547-ec77196f6094 // indirect
+	golang.org/x/sys v0.0.0-20191024172528-b4ff53e7a1cb // indirect
+	golang.org/x/text v0.3.2 // indirect
 )

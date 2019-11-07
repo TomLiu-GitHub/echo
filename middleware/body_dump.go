@@ -8,7 +8,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 )
 
 type (
@@ -40,7 +40,7 @@ var (
 
 // BodyDump returns a BodyDump middleware.
 //
-// BodyLimit middleware captures the request and response payload and calls the
+// BodyDump middleware captures the request and response payload and calls the
 // registered handler.
 func BodyDump(handler BodyDumpHandler) echo.MiddlewareFunc {
 	c := DefaultBodyDumpConfig
@@ -104,8 +104,4 @@ func (w *bodyDumpResponseWriter) Flush() {
 
 func (w *bodyDumpResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return w.ResponseWriter.(http.Hijacker).Hijack()
-}
-
-func (w *bodyDumpResponseWriter) CloseNotify() <-chan bool {
-	return w.ResponseWriter.(http.CloseNotifier).CloseNotify()
 }

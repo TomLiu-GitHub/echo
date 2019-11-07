@@ -1,6 +1,7 @@
 package echo
 
 import (
+	"encoding"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -21,6 +22,8 @@ type (
 	DefaultBinder struct{}
 
 	// BindUnmarshaler is the interface used to wrap the UnmarshalParam method.
+	// Types that don't implement this, but do implement encoding.TextUnmarshaler
+	// will use that interface instead.
 	BindUnmarshaler interface {
 		// UnmarshalParam decodes and assigns a value from an form or query param.
 		UnmarshalParam(param string) error
@@ -30,14 +33,21 @@ type (
 // Bind implements the `Binder#Bind` function.
 func (b *DefaultBinder) Bind(i interface{}, c Context) (err error) {
 	req := c.Request()
+
+	names := c.ParamNames()
+	values := c.ParamValues()
+	params := map[string][]string{}
+	for i, name := range names {
+		params[name] = []string{values[i]}
+	}
+	if err := b.bindData(i, params, "param"); err != nil {
+		return NewHTTPError(http.StatusBadRequest, err.Error()).SetInternal(err)
+	}
+	if err = b.bindData(i, c.QueryParams(), "query"); err != nil {
+		return NewHTTPError(http.StatusBadRequest, err.Error()).SetInternal(err)
+	}
 	if req.ContentLength == 0 {
-		if req.Method == GET || req.Method == DELETE {
-			if err = b.bindData(i, c.QueryParams(), "query"); err != nil {
-				return NewHTTPError(http.StatusBadRequest, err.Error()).SetInternal(err)
-			}
-			return
-		}
-		return NewHTTPError(http.StatusBadRequest, "Request body can't be empty")
+		return
 	}
 	ctype := req.Header.Get(HeaderContentType)
 	switch {
@@ -47,10 +57,8 @@ func (b *DefaultBinder) Bind(i interface{}, c Context) (err error) {
 				return NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Unmarshal type error: expected=%v, got=%v, field=%v, offset=%v", ute.Type, ute.Value, ute.Field, ute.Offset)).SetInternal(err)
 			} else if se, ok := err.(*json.SyntaxError); ok {
 				return NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Syntax error: offset=%v, error=%v", se.Offset, se.Error())).SetInternal(err)
-			} else {
-				return NewHTTPError(http.StatusBadRequest, err.Error()).SetInternal(err)
 			}
-			return NewHTTPError(http.StatusBadRequest, err.Error())
+			return NewHTTPError(http.StatusBadRequest, err.Error()).SetInternal(err)
 		}
 	case strings.HasPrefix(ctype, MIMEApplicationXML), strings.HasPrefix(ctype, MIMETextXML):
 		if err = xml.NewDecoder(req.Body).Decode(i); err != nil {
@@ -58,10 +66,8 @@ func (b *DefaultBinder) Bind(i interface{}, c Context) (err error) {
 				return NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Unsupported type error: type=%v, error=%v", ute.Type, ute.Error())).SetInternal(err)
 			} else if se, ok := err.(*xml.SyntaxError); ok {
 				return NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Syntax error: line=%v, error=%v", se.Line, se.Error())).SetInternal(err)
-			} else {
-				return NewHTTPError(http.StatusBadRequest, err.Error()).SetInternal(err)
 			}
-			return NewHTTPError(http.StatusBadRequest, err.Error())
+			return NewHTTPError(http.StatusBadRequest, err.Error()).SetInternal(err)
 		}
 	case strings.HasPrefix(ctype, MIMEApplicationForm), strings.HasPrefix(ctype, MIMEMultipartForm):
 		params, err := c.FormParams()
@@ -78,9 +84,21 @@ func (b *DefaultBinder) Bind(i interface{}, c Context) (err error) {
 }
 
 func (b *DefaultBinder) bindData(ptr interface{}, data map[string][]string, tag string) error {
+	if ptr == nil || len(data) == 0 {
+		return nil
+	}
 	typ := reflect.TypeOf(ptr).Elem()
 	val := reflect.ValueOf(ptr).Elem()
 
+	// Map
+	if typ.Kind() == reflect.Map {
+		for k, v := range data {
+			val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v[0]))
+		}
+		return nil
+	}
+
+	// !struct
 	if typ.Kind() != reflect.Struct {
 		return errors.New("binding element must be a struct")
 	}
@@ -215,12 +233,30 @@ func bindUnmarshaler(field reflect.Value) (BindUnmarshaler, bool) {
 	return nil, false
 }
 
+// textUnmarshaler attempts to unmarshal a reflect.Value into a TextUnmarshaler
+func textUnmarshaler(field reflect.Value) (encoding.TextUnmarshaler, bool) {
+	ptr := reflect.New(field.Type())
+	if ptr.CanInterface() {
+		iface := ptr.Interface()
+		if unmarshaler, ok := iface.(encoding.TextUnmarshaler); ok {
+			return unmarshaler, ok
+		}
+	}
+	return nil, false
+}
+
 func unmarshalFieldNonPtr(value string, field reflect.Value) (bool, error) {
 	if unmarshaler, ok := bindUnmarshaler(field); ok {
 		err := unmarshaler.UnmarshalParam(value)
 		field.Set(reflect.ValueOf(unmarshaler).Elem())
 		return true, err
 	}
+	if unmarshaler, ok := textUnmarshaler(field); ok {
+		err := unmarshaler.UnmarshalText([]byte(value))
+		field.Set(reflect.ValueOf(unmarshaler).Elem())
+		return true, err
+	}
+
 	return false, nil
 }
 
